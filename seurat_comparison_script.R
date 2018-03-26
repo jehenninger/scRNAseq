@@ -6,23 +6,76 @@ library(Matrix)
 gene_threshold <- c(200, 2500) # [min, max] count
 mito_threshold <- c(-Inf, 0.05) # [min, max] frequency
 
-data_location <- "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/merged_counts_M1_M2.csv" #@TODO add ability to do 10X sparse data
-cell.label.location <- "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/sample_labels.csv"
+sample_A_location <- "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/JH_M2/JH_M2.counts.tr.csv" #@TODO add ability to do 10X sparse data
+sample_B_location <- "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/JH_M1/JH_M1.counts.tr.csv"
+
+#cell.label.location <- "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/sample_labels.csv"
 # cell.label.location <- NULL
 ##### LOAD DATA #####
 # km.data <- Read10X(data.dir = data_dir)
-km.data <- read.csv(file = data_location, header = FALSE)
-cell.label <- read.csv(file = cell.label.location, header = FALSE)
-cell.label <- cell.label[-1]
-cell.label <- t(cell.label)
-rownames(cell.label) <- colnames(km.data)
-new_rownames <- make.names(km.data[ , 1], unique = TRUE)
-rownames(km.data) <- new_rownames
-km.data <- km.data[ ,-1]
 
-#
-km <- CreateSeuratObject(raw.data = km.data, min.cells = 3, min.genes = 200, project = "GATA_WT_MERGED")
+# Set up sample A
+sample_A.data <- read.csv(file = sample_A_location, header = FALSE)
+new_rownames <- make.names(sample_A.data[ , 1], unique = TRUE)
+rownames(sample_A.data) <- new_rownames
+sample_A.data <- sample_A.data[ ,-1]
+sample_A <- CreateSeuratObject(raw.data = sample_A.data, project = "GATA", min.cells = 3)
+sample_A@meta.data$genotype <- "WT"
+sample_A <- FilterCells(sample_A, subset.names = "nGene", low.thresholds = gene_threshold[1], high.thresholds = gene_threshold[2])
+sample_A <- NormalizeData(sample_A)
+sample_A <- ScaleData(sample_A, display.progress = T)
 
+# Set up sample B
+sample_B.data <- read.csv(file = sample_B_location, header = FALSE)
+new_rownames <- make.names(sample_B.data[ , 1], unique = TRUE)
+rownames(sample_B.data) <- new_rownames
+sample_B.data <- sample_B.data[ ,-1]
+sample_B <- CreateSeuratObject(raw.data = sample_B.data, project = "GATA", min.cells = 3)
+sample_B@meta.data$genotype <- "GATA"
+sample_B <- FilterCells(sample_B, subset.names = "nGene", low.thresholds = gene_threshold[1], high.thresholds = gene_threshold[2])
+sample_B <- NormalizeData(sample_B)
+sample_B <- ScaleData(sample_B, display.progress = T)
+
+#Gene selection for input to CCA
+sample_A <- FindVariableGenes(sample_A, do.plot = F)
+sample_B <- FindVariableGenes(sample_B, do.plot = F)
+g.1 <- head(rownames(sample_A@hvg.info), 1000)
+g.2 <- head(rownames(sample_B@hvg.info), 1000)
+genes.use <- unique(c(g.1, g.2))
+genes.use <- intersect(genes.use, rownames(sample_A@scale.data))
+genes.use <- intersect(genes.use, rownames(sample_B@scale.data))
+
+# Canonical correlation analysis
+combined <- RunCCA(sample_A, sample_B, genes.use = genes.use, num.cc = 30, add.cell.id1 = "_WT", add.cell.id2 = "_GATA")
+
+p1 <- DimPlot(object = combined, reduction.use = "cca", group.by = "genotype",
+              pt.size = 0.5, do.return = TRUE)
+
+p2 <- VlnPlot(object = combined, features.plot = "CC1", group.by = "genotype",
+              do.return = TRUE)
+
+plot_grid(p1,p2)
+
+PrintDim(object = combined, reduction.type = "cca", dims.print = 1:2, genes.print = 10)
+
+p3 <- MetageneBicorPlot(combined, grouping.var = "genotype", dims.eval = 1:30, display.progress = FALSE)
+
+combined <- AlignSubspace(combined, reduction.type = "cca", grouping.var = "genotype",
+                          dims.align = 1:20)
+
+combined <- RunTSNE(combined, reduction.use = "cca.aligned", dims.use = 1:20, do.fast = T)
+combined <- FindClusters(combined, reduction.type = "cca.aligned",
+                         resolution = 0.6, dims.use = 1:20)
+
+p1 <- TSNEPlot(combined, do.return = T, pt.size = 0.5, group.by = "genotype")
+p2 <- TSNEPlot(combined, do.label = T, do.return = T, pt.size = 0.5)
+plot_grid(p1,p2)
+
+conserved_markers <- list()
+for(i in 1:19){
+  conserved_markers[i] <- FindConservedMarkers(combined, ident.1 = i, grouping.var = "genotype", 
+                                              print.bar = FALSE)
+}
 ##### QC #####
 
 # UMIs mapping to mitochondrial genes
@@ -48,7 +101,7 @@ km <- NormalizeData(object = km, normalization.method = "LogNormalize", scale.fa
 
 ##### VARIABLE GENES #####
 km <- FindVariableGenes(object = km, mean.function = ExpMean, dispersion.function = LogVMR, x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
- #@TODO check these parameters to see if they make sense for our data
+#@TODO check these parameters to see if they make sense for our data
 
 print("Number of variable genes:", quote = FALSE)
 length(x = km@var.genes)
@@ -66,7 +119,7 @@ PCAPlot(object = km, dim.1 = 1, dim.2 = 2)
 
 # Jackstraw method
 km <- JackStraw(object = km, num.replicate = 100, do.print = FALSE) #@SPEED
- 
+
 JackStrawPlot(object = km, PCs = 1:20)
 
 # PC Elbow plot
