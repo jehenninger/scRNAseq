@@ -71,105 +71,119 @@ p1 <- TSNEPlot(combined, do.return = T, pt.size = 0.5, group.by = "genotype")
 p2 <- TSNEPlot(combined, do.label = T, do.return = T, pt.size = 0.5)
 plot_grid(p1,p2)
 
-conserved_markers <- list()
-for(i in 1:19){
-  conserved_markers[i] <- FindConservedMarkers(combined, ident.1 = i, grouping.var = "genotype", 
-                                              print.bar = FALSE)
+
+save(combined, file = "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/seurat/km_comparison.Robj")
+
+## this doesn't work
+# conserved_markers <- list()
+# count <- 1
+# for(i in 0:18){
+#   conserved_markers[count] <- FindConservedMarkers(combined, ident.1 = i, grouping.var = "genotype", 
+#                                               print.bar = FALSE)
+#   count <- count + 1
+# }
+
+
+##### Quantify clusters by genotype #####
+combined <- SetAllIdent(object = combined, id = "celltype")
+count_table <- table(combined@ident, combined@meta.data$genotype)
+freq_table <- prop.table(x = count_table, margin = 2)
+count_table
+freq_table
+
+tsne_feature_list <- c("myca",
+                       "npm1a",
+                       "alas2",
+                       "lyz",
+                       "marco",
+                       "kdrl",
+                       "meis1b",
+                       "dap1b",
+                       "lck",
+                       "dusp2",
+                       "zap70")
+colors_to_use <- c("lightgrey", "blue") #scaled from first color in list to second color in list
+FeaturePlot(object = combined, features.plot = tsne_feature_list, cols.use = colors_to_use, reduction.use = "tsne", pt.size = 0.5)
+
+
+##### Name clusters #####
+new.ident <- c("neutrophil_1",
+               "progenitor_1",
+               "erythrocytes_1",
+               "erythrocytes_2",
+               "T",
+               "B_1",
+               "progenitor_2",
+               "neutrophil_2",
+               "B_2",
+               "macrophage",
+               "vascular",
+               "unknown_1",
+               "unknown_2",
+               "progenitor_3",
+               "unknown_3",
+               "HSC_1",
+               "unknown_4",
+               "HSC_2",
+               "unknown_5")
+
+for (i in 0:18) {
+  combined <- RenameIdent(object = combined, old.ident.name = i, 
+                                 new.ident.name = new.ident[i + 1])
 }
-##### QC #####
 
-# UMIs mapping to mitochondrial genes
-# note: check to make sure that mt genes are denoted as mt.atp and not as mt-atp
-mito.genes <- grep(pattern = "^mt\\.", x = rownames(x = km@data), value = TRUE)
-percent.mito <- Matrix::colSums(km@raw.data[mito.genes, ]) / Matrix::colSums(km@raw.data)
+##### Compare clusters between groups #####
+combined@meta.data$celltype.genotype <- paste0(combined@ident, "_", 
+                                                  combined@meta.data$genotype)
+combined <- StashIdent(combined, save.name = "celltype")
+combined <- SetAllIdent(combined, id = "celltype.genotype")
 
-km <- AddMetaData(object = km, metadata = percent.mito, col.name = "percent.mito")
+combined <- SetAllIdent(combined, id = "genotype")
+overall_gata_vs_wt <- FindMarkers(combined, ident.1 = "GATA", ident.2 = "WT", print.bar = TRUE)
 
-km <- AddMetaData(object = km, metadata = cell.label, col.name = "cell.label")
-VlnPlot(object = km, features.plot = c("nGene", "nUMI", "percent.mito"), nCol = 3)
 
-par(mfrow = c(1,2))
-GenePlot(object = km, gene1 = "nUMI", gene2 = "percent.mito")
-GenePlot(object = km, gene1 = "nUMI", gene2 = "nGene")
+neutrophil_1_gata_vs_wt <- FindMarkers(combined, ident.1 = "neutrophil_1_GATA", ident.2 = "neutrophil_1_WT", print.bar = FALSE)
 
-km <- FilterCells(object = km, subset.names = c("nGene", "percent.mito"),
-                  low.thresholds = c(gene_threshold[1], mito_threshold[1]),
-                  high.thresholds = c(gene_threshold[2], mito_threshold[2]))
+neutrophil_2_gata_vs_wt <- FindMarkers(combined, ident.1 = "neutrophil_2_GATA", ident.2 = "neutrophil_2_WT", print.bar = FALSE)
 
-##### NORMALIZE #####
-km <- NormalizeData(object = km, normalization.method = "LogNormalize", scale.factor = 1e4)
+progenitor_1_gata_vs_wt <- FindMarkers(combined, ident.1 = "progenitor_1_GATA", ident.2 = "progenitor_1_WT", print.bar = FALSE)
+progenitor_2_gata_vs_wt <- FindMarkers(combined, ident.1 = "progenitor_2_GATA", ident.2 = "progenitor_2_WT", print.bar = FALSE)
+progenitor_3_gata_vs_wt <- FindMarkers(combined, ident.1 = "progenitor_3_GATA", ident.2 = "progenitor_3_WT", print.bar = FALSE)
 
-##### VARIABLE GENES #####
-km <- FindVariableGenes(object = km, mean.function = ExpMean, dispersion.function = LogVMR, x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
-#@TODO check these parameters to see if they make sense for our data
+hsc_1_gata_vs_wt <- FindMarkers(combined, ident.1 = "HSC_1_GATA", ident.2 = "HSC_1_WT", print.bar = FALSE)
+hsc_2_gata_vs_wt <- FindMarkers(combined, ident.1 = "HSC_2_GATA", ident.2 = "HSC_2_WT", print.bar = FALSE)
 
-print("Number of variable genes:", quote = FALSE)
-length(x = km@var.genes)
+erythrocytes_1_gata_vs_wt <- FindMarkers(combined, ident.1 = "erythrocytes_1_GATA", ident.2 = "erythrocytes_1_WT", print.bar = FALSE)
+erythrocytes_2_gata_vs_wt <- FindMarkers(combined, ident.1 = "erythrocytes_2_GATA", ident.2 = "erythrocytes_2_WT", print.bar = FALSE)
 
-##### SCALE DATA AND REGRESSION #####
+compared_feature_list <- c("lyz", "mpx")
+FeatureHeatmap(combined, features.plot = compared_feature_list, group.by = "genotype", pt.size = 2, key.position = "top", max.exp = 3)
 
-km <- ScaleData(object = km, vars.to.regress = c("nUMI", "percent.mito")) #@SPEED
 
-##### PCA DIMENSIONALITY REDUCTION #####
-km <- RunPCA(object = km, pc.genes = km@var.genes, do.print = FALSE, pcs.print = 1:5, genes.print = 5)
 
-# PrintPCA(object = km, pcs.print = 1:5, genes.print = 5, use.full = FALSE)
-# VizPCA(object = km, pcs.use = 1:2)
-PCAPlot(object = km, dim.1 = 1, dim.2 = 2)
 
-# Jackstraw method
-km <- JackStraw(object = km, num.replicate = 100, do.print = FALSE) #@SPEED
+##### Scatter plots of group comparison #####
+neutrophils <- SubsetData(combined, ident.use = c(0,7), subset.raw = T)
+neutrophils <- SetAllIdent(neutrophils, id = "genotype")
+avg.t.cells <- log1p(AverageExpression(t.cells, show.progress = FALSE))
+avg.t.cells$gene <- rownames(avg.t.cells)
 
-JackStrawPlot(object = km, PCs = 1:20)
+cd14.mono <- SubsetData(immune.combined, ident.use = "CD14 Mono", subset.raw = T)
+cd14.mono <- SetAllIdent(cd14.mono, id = "stim")
+avg.cd14.mono <- log1p(AverageExpression(cd14.mono, show.progress = FALSE))
+avg.cd14.mono$gene <- rownames(avg.cd14.mono)
 
-# PC Elbow plot
-PCElbowPlot(object = km)
-
-##### CLUSTERING #####
-num_of_pca_components_to_use = 10
-km <- FindClusters(object = km, reduction.type = "pca", dims.use = 1:num_of_pca_components_to_use, resolution = 0.6, print.output = 0, save.SNN = TRUE)
-
-##### SAVE OBJECT #####
-
-save(km, file = "/Users/jon/data_analysis/scRNAseq inDrop second try with Elliott/20180201-Fast-1/project/seurat/km_merged_v1.Robj")
-
-##### tSNE #####
-km <- RunTSNE(object = km, dims.use = 1:num_of_pca_components_to_use, do.fast = TRUE)
-TSNEPlot(object = km, do.label = TRUE)
-
-TSNEPlot(object = km, do.label = TRUE, group.by = "cell.label")
-
-##### FIND ALL MARKERS OF CLUSTERS #####
-HSCcluster.markers <- FindMarkers(object = km, ident.1 = "HSCs thrombocytes2", min.pct = 0.25)
-
-km.markers <- FindAllMarkers(object = km, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
-top10 <- km.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
-
-##### VIOLIN PLOT OF USER GENES ACROSS CLUSTERS #####
-violin_gene_list <- c("gene1", "gene2") 
-VlnPlot(object = km, features.plot = violin_gene_list)
-
-##### FEATURE TSNE PLOTS #####
-tsne_feature_list <- c("gata1b")
-colors_to_use <- c("grey", "blue") #scaled from first color in list to second color in list
-FeaturePlot(object = km, features.plot = tsne_feature_list, cols.use = colors_to_use, reduction.use = "tsne")
-
-##### HEATMAP OF MARKER GENES #####
-DoHeatmap(object = km, genes.use = top10$gene, slim.col.label = TRUE, remove.key = TRUE)
-
-##### IDENTIFY CLUSTERS #####
-current.cluster.ids <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-new.cluster.ids <- c("myeloid2",
-                     "progenitors",
-                     "myeloid1",
-                     "erythrocytes2",
-                     "erythrocytes1",
-                     "B-cells",
-                     "macrophage1",
-                     "HSCs thrombocytes1",
-                     "macrophage2",
-                     "neutrophil",
-                     "kidney",
-                     "unknown",
-                     "HSCs thrombocytes2")
-km@ident <- plyr::mapvalues(x = km@ident, from = current.cluster.ids, to = new.cluster.ids)
+genes.to.label1 = c("ISG15", "LY6E", "IFI6", "ISG20", "MX1")
+genes.to.label2 = c("IFIT2", "IFIT1")
+genes.to.label3 = c("CXCL10", "CCL8")
+p1 <- ggplot(avg.t.cells, aes(CTRL, STIM)) + geom_point() + ggtitle("CD4 Naive T Cells")
+p1 <- LabelUR(p1, genes = c(genes.to.label1, genes.to.label2), avg.t.cells, 
+              adj.u.t = 0.3, adj.u.s = 0.23)
+p1 <- LabelUL(p1, genes = genes.to.label3, avg.t.cells, adj.u.t = 0.5, adj.u.s = 0.4, 
+              adj.l.t = 0.25, adj.l.s = 0.25)
+p2 <- ggplot(avg.cd14.mono, aes(CTRL, STIM)) + geom_point() + ggtitle("CD14 Monocytes")
+p2 <- LabelUR(p2, genes = c(genes.to.label1, genes.to.label3), avg.cd14.mono, 
+              adj.u.t = 0.3, adj.u.s = 0.23)
+p2 <- LabelUL(p2, genes = genes.to.label2, avg.cd14.mono, adj.u.t = 0.5, adj.u.s = 0.4, 
+              adj.l.t = 0.25, adj.l.s = 0.25)
+plot_grid(p1, p2)
