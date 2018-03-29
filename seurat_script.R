@@ -75,6 +75,8 @@ PCElbowPlot(object = km)
 ##### CLUSTERING #####
 num_of_pca_components_to_use = 10
 km <- FindClusters(object = km, reduction.type = "pca", dims.use = 1:num_of_pca_components_to_use, resolution = 0.6, print.output = 0, save.SNN = TRUE)
+km <- FindClusters(object = km, reduction.type = "pca", dims.use = 1:num_of_pca_components_to_use, resolution = 1.2, print.output = 0, save.SNN = TRUE)
+
 
 ##### SAVE OBJECT #####
 
@@ -87,10 +89,31 @@ TSNEPlot(object = km, do.label = TRUE)
 TSNEPlot(object = km, do.label = TRUE, group.by = "cell.label")
 
 ##### FIND ALL MARKERS OF CLUSTERS #####
-HSCcluster.markers <- FindMarkers(object = km, ident.1 = "HSCs thrombocytes2", min.pct = 0.25)
+HSCcluster.markers <- FindMarkers(object = km, ident.1 = "thrombocytes", min.pct = 0.25)
+write.table(HSCcluster.markers,
+            file = "/Users/jon/data_analysis/10X_scRNAseq/seurat/gfp_markers.tsv",
+            quote = FALSE,
+            sep = "\t",
+            row.names = TRUE,
+            col.names = NA,
+            na = "\t")
+
 
 km.markers <- FindAllMarkers(object = km, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
+top20 <- km.markers %>% group_by(cluster) %>% top_n(20, avg_logFC)
+
+
+write.table(top20,
+            file = "/Users/jon/data_analysis/10X_scRNAseq/seurat/top20_markers.tsv",
+            quote = FALSE,
+            sep = "\t",
+            row.names = TRUE,
+            col.names = NA,
+            na = "\t")
+
+
 top10 <- km.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
+top5 <- km.markers %>% group_by(cluster) %>% top_n(5, avg_logFC)
 
 ##### VIOLIN PLOT OF USER GENES ACROSS CLUSTERS #####
 violin_gene_list <- c("gene1", "gene2") 
@@ -102,21 +125,35 @@ colors_to_use <- c("grey", "blue") #scaled from first color in list to second co
 FeaturePlot(object = km, features.plot = tsne_feature_list, cols.use = colors_to_use, reduction.use = "tsne")
 
 ##### HEATMAP OF MARKER GENES #####
-DoHeatmap(object = km, genes.use = top10$gene, slim.col.label = TRUE, remove.key = TRUE)
+DoHeatmap(object = km, genes.use = top5$gene, slim.col.label = TRUE, remove.key = TRUE)
 
 ##### IDENTIFY CLUSTERS #####
-current.cluster.ids <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-new.cluster.ids <- c("myeloid2",
-                     "progenitors",
-                     "myeloid1",
-                     "erythrocytes2",
-                     "erythrocytes1",
-                     "B-cells",
-                     "macrophage1",
-                     "HSCs thrombocytes1",
-                     "macrophage2",
-                     "neutrophil",
-                     "kidney",
-                     "unknown",
-                     "HSCs thrombocytes2")
+current.cluster.ids <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
+new.cluster.ids <- c("progenitor_1",
+                     "progenitor_2",
+                     "progenitor_3",
+                     "erythrocyte_1",
+                     "erythrocyte_2",
+                     "B_cell",
+                     "progenitor_4",
+                     "progenitor_5",
+                     "neutrophil_1",
+                     "macrophage",
+                     "neutrophil_2",
+                     "kidney_progenitors_1",
+                     "kidney_mucin",
+                     "thrombocytes",
+                     "kidney_progenitors_2")
 km@ident <- plyr::mapvalues(x = km@ident, from = current.cluster.ids, to = new.cluster.ids)
+
+tsne_feature_list <- c("npm1a",
+                       "alas2",
+                       "lyz",
+                       "marco",
+                       "meis1b",
+                       "dap1b",
+                       "EGFP")
+colors_to_use <- c("lightgrey", "blue") #scaled from first color in list to second color in list
+FeaturePlot(object = km, features.plot = tsne_feature_list, cols.use = colors_to_use, reduction.use = "tsne", pt.size = 0.5)
+
+
